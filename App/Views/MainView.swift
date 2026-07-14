@@ -50,16 +50,22 @@ struct MainView: View {
     // MARK: - Layouts
 
     private var portraitLayout: some View {
-        VStack(spacing: 24) {
-            gaugeStack(scale: 1)
-            signView()
-            restrictionChips
-            Spacer()
-            permissionButton
-            dataFooter
+        // Scrolls when active restrictions make the content taller than the
+        // viewport; otherwise the Spacer pins the button and footer to the bottom.
+        GeometryReader { proxy in
+            ScrollView {
+                VStack(spacing: 24) {
+                    gaugeStack(scale: 1)
+                    signView()
+                    restrictionChips
+                    Spacer(minLength: 0)
+                    controlButton
+                    dataFooter
+                }
+                .frame(maxWidth: .infinity, minHeight: proxy.size.height - 32)
+                .padding(16)
+            }
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .padding()
     }
 
     private func landscapeLayout(_ size: CGSize) -> some View {
@@ -71,11 +77,9 @@ struct MainView: View {
             HStack(alignment: .center, spacing: 8) {
                 gaugeStack(scale: gaugeSide / 340)
                     .frame(maxWidth: .infinity)
-                VStack(spacing: 14) {
-                    signView(side: signSide)
-                    permissionButton
-                }
-                .frame(maxWidth: .infinity)
+                circleControlButton
+                signView(side: signSide)
+                    .frame(maxWidth: .infinity)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             dataFooter
@@ -114,7 +118,10 @@ struct MainView: View {
 
     private var showsLocationWarning: Bool {
         switch location.authorization {
-        case .denied, .restricted, .authorizedWhenInUse: return true
+        case .denied, .restricted: return true
+        // Provisional Always reports `.authorizedAlways`, so trust `hasFullAlways`
+        // rather than the status enum to decide whether to nudge for real Always.
+        case .authorizedAlways, .authorizedWhenInUse: return !location.hasFullAlways
         default: return false
         }
     }
@@ -145,9 +152,11 @@ struct MainView: View {
         switch location.authorization {
         case .denied, .restricted:
             banner(icon: "location.slash", text: "Location access is off. Enable it in Settings to see your speed limit.", color: .red)
-        case .authorizedWhenInUse:
-            banner(icon: "location", text: "Background alerts need location access set to \u{201C}Always\u{201D}. Tap to open Settings.", color: .orange)
-                .onTapGesture { openSystemSettings() }
+        case .authorizedAlways, .authorizedWhenInUse:
+            if !location.hasFullAlways {
+                banner(icon: "location", text: "Background alerts only work if you allow location access \u{201C}Always\u{201D}. Tap to open Settings.", color: .orange)
+                    .onTapGesture { openSystemSettings() }
+            }
         default:
             EmptyView()
         }
@@ -202,8 +211,20 @@ struct MainView: View {
         }
     }
 
-    @ViewBuilder private var permissionButton: some View {
+    /// The primary button under the sign: pause/continue while tracking, or a
+    /// permission prompt when location access is missing.
+    @ViewBuilder private var controlButton: some View {
         switch location.authorization {
+        case .authorizedAlways, .authorizedWhenInUse:
+            Button { location.isPaused ? location.resume() : location.pause() } label: {
+                Label(location.isPaused ? "Continue" : "Pause",
+                      systemImage: location.isPaused ? "play.fill" : "pause.fill")
+                    .font(.headline)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 12)
+            }
+            .buttonStyle(.bordered)
+            .tint(location.isPaused ? .green : .accentColor)
         case .notDetermined:
             Button { permissions.showsPrimer = true } label: {
                 Label("Allow location access", systemImage: "location.fill")
@@ -224,6 +245,38 @@ struct MainView: View {
         default:
             EmptyView()
         }
+    }
+
+    /// Compact icon-only variant used in landscape, sitting between the gauge and
+    /// the sign. Same actions as `controlButton`, just a colored circle.
+    @ViewBuilder private var circleControlButton: some View {
+        switch location.authorization {
+        case .authorizedAlways, .authorizedWhenInUse:
+            circleButton(icon: location.isPaused ? "play.fill" : "pause.fill",
+                         tint: location.isPaused ? .green : .accentColor) {
+                location.isPaused ? location.resume() : location.pause()
+            }
+        case .notDetermined:
+            circleButton(icon: "location.fill", tint: .accentColor) {
+                permissions.showsPrimer = true
+            }
+        case .denied, .restricted:
+            circleButton(icon: "gearshape.fill", tint: .red) { openSystemSettings() }
+        default:
+            EmptyView()
+        }
+    }
+
+    private func circleButton(icon: String, tint: Color,
+                              action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: icon)
+                .font(.title2.weight(.bold))
+                .foregroundStyle(.white)
+                .frame(width: 56, height: 56)
+                .background(tint, in: Circle())
+        }
+        .buttonStyle(.plain)
     }
 
     @ViewBuilder private var cornerChips: some View {
@@ -262,12 +315,12 @@ struct MainView: View {
         .foregroundStyle(.tertiary)
     }
 
-    /// Speeding when the GPS speed is more than 10% over the active limit.
-    /// The limit is legally in km/h, so the comparison is done in km/h.
+    /// Speeding when the GPS speed is over the active limit by more than the
+    /// user's threshold. The limit is legally in km/h, so the comparison is in km/h.
     private var isOverLimit: Bool {
         guard let limit = monitor.currentSpeedLimit,
               let ms = location.speedMetersPerSecond else { return false }
-        return ms * SpeedFormatting.msToKmh > Double(limit) * 1.10
+        return ms * SpeedFormatting.msToKmh > Double(limit) * (1 + Double(settings.speedingThresholdPercent) / 100)
     }
 
     private func openSystemSettings() {

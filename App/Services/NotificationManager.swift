@@ -13,7 +13,7 @@ final class NotificationManager: NSObject, ObservableObject {
             switch self {
             case .begin:    return UNNotificationSound(named: UNNotificationSoundName("begin_notification.wav"))
             case .end:      return UNNotificationSound(named: UNNotificationSoundName("end_notification.wav"))
-            case .speeding: return UNNotificationSound(named: UNNotificationSoundName("speeding_notification.wav"))
+            case .speeding: return UNNotificationSound(named: UNNotificationSoundName("record.caf"))
             }
         }
     }

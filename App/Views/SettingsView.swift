@@ -23,10 +23,30 @@ struct SettingsView: View {
                     Toggle(isOn: speedingBinding) {
                         Text("Speeding warning")
                     }
+                    if settings.speedingWarningEnabled {
+                        Stepper(value: $settings.speedingThresholdPercent, in: 0...50, step: 5) {
+                            HStack {
+                                Text("Warning threshold")
+                                Spacer()
+                                Text(verbatim: "\(settings.speedingThresholdPercent) %")
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                    }
                 } header: {
                     Text("Speeding")
                 } footer: {
-                    Text("Alerts you (even in the background) when you go more than 10% over the limit. Starts 10 seconds after entering a speed-limit zone. Requires location set to \u{201C}Always\u{201D}.")
+                    Text("Alerts you (even in the background) when you exceed the limit by more than the threshold. Starts 10 seconds after entering a speed-limit zone. Requires location set to \u{201C}Always\u{201D}.")
+                }
+
+                Section {
+                    Picker("Appearance", selection: $settings.appearance) {
+                        ForEach(AppearanceMode.allCases) { Text($0.label).tag($0) }
+                    }
+                } header: {
+                    Text("Appearance")
+                } footer: {
+                    Text("Sets the app's light or dark look, independently of your device's system setting.")
                 }
 
                 Section {
@@ -86,6 +106,9 @@ struct SettingsView: View {
                 }
             }
         }
+        // The sheet is hosted separately from RootView, so apply the override here
+        // too or the picker wouldn't restyle this screen until it's reopened.
+        .preferredColorScheme(settings.appearance.colorScheme)
     }
 
     private func typeLabel(_ type: RestrictionType) -> some View {

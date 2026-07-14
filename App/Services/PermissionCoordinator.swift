@@ -1,4 +1,3 @@
-import Combine
 import Foundation
 
 /// Drives the location + notification permission flow. Requests are explained by
@@ -11,20 +10,10 @@ final class PermissionCoordinator: ObservableObject {
 
     private let location: LocationManager
     private let notifications: NotificationManager
-    private var cancellables: Set<AnyCancellable> = []
-    /// True while we're waiting for the user to answer the location prompt, so a
-    /// stray authorization change from elsewhere doesn't advance the chain.
-    private var awaitingLocationResponse = false
 
     init(location: LocationManager, notifications: NotificationManager) {
         self.location = location
         self.notifications = notifications
-
-        // Continue to the notification request once the location prompt resolves.
-        location.$authorization
-            .dropFirst()
-            .sink { [weak self] _ in self?.locationDidRespond() }
-            .store(in: &cancellables)
     }
 
     /// Called after launch: begins updates if already authorized and, when any
@@ -46,18 +35,17 @@ final class PermissionCoordinator: ObservableObject {
     func beginRequests() {
         showsPrimer = false
         if location.authorization == .notDetermined {
-            awaitingLocationResponse = true
-            location.requestAuthorization()
+            location.requestAuthorization { [weak self] in
+                // iOS silently drops a system alert requested while another is
+                // still dismissing, so give the location prompt a beat to clear
+                // before asking about notifications.
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
+                    self?.requestNotifications()
+                }
+            }
         } else {
             requestNotifications()
         }
-    }
-
-    private func locationDidRespond() {
-        guard awaitingLocationResponse,
-              location.authorization != .notDetermined else { return }
-        awaitingLocationResponse = false
-        requestNotifications()
     }
 
     private func requestNotifications() {

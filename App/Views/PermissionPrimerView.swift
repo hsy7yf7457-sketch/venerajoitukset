@@ -67,7 +67,7 @@ struct PermissionPrimerView: View {
             Image(systemName: "exclamationmark.triangle.fill")
                 .font(.callout)
                 .foregroundStyle(.orange)
-            Text("Important: for alerts to work, allow location access \u{201C}Always\u{201D}. iOS grants \u{201C}While Using\u{201D} first — you may need to return to the home screen after granting access, then reopen the app to enable \u{201C}Always\u{201D}.")
+            Text("Background alerts only work if you manually allow location access \u{201C}Always\u{201D}.")
                 .font(.footnote)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)

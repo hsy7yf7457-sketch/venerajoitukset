@@ -5,6 +5,7 @@ import SwiftUI
 /// black — all in a single 0.7s ease-in-out pass.
 struct RootView: View {
     @EnvironmentObject private var permissions: PermissionCoordinator
+    @EnvironmentObject private var settings: AppSettings
     @State private var isRevealed = false
     @State private var splashHidden = false
 
@@ -31,6 +32,7 @@ struct RootView: View {
         .sheet(isPresented: $permissions.showsPrimer) {
             PermissionPrimerView()
         }
+        .preferredColorScheme(settings.appearance.colorScheme)
         .onAppear {
             guard !isRevealed else { return }
             withAnimation(.easeInOut(duration: 0.7)) {
